@@ -121,7 +121,18 @@ export function GameClient() {
         </thead>
         <tbody>
           {history.map((item, index) => (
-            <tr key={`${item.guess}-${index}`}>
+            <tr
+              key={`${item.guess}-${index}`}
+              className="score-row"
+              style={{
+                ["--score" as string]: `${Math.max(0, Math.min(100, item.score))}%`,
+                ["--score-hue" as string]: String(
+                  Math.round(
+                    12 + ((Math.max(0, Math.min(100, item.score)) / 100) * (142 - 12))
+                  )
+                )
+              }}
+            >
               <td>{item.guess}</td>
               <td>{item.score.toFixed(1)}</td>
               <td>#{item.rank}</td>

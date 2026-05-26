@@ -1,6 +1,10 @@
 :root {
   color-scheme: light;
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --bar-red-hue: 12;
+  --bar-green-hue: 142;
+  --bar-saturation: 52%;
+  --bar-lightness: 42%;
 }
 
 * {
@@ -59,6 +63,20 @@ td {
   border-bottom: 1px solid #d8cfbe;
   text-align: left;
   padding: 0.45rem;
+}
+
+.score-row {
+  background:
+    linear-gradient(
+      90deg,
+      hsl(var(--score-hue) var(--bar-saturation) var(--bar-lightness)) 0%,
+      hsl(var(--score-hue) var(--bar-saturation) var(--bar-lightness)) 100%
+    ) 0 0 / var(--score) 100% no-repeat,
+    #fffdf8;
+}
+
+.score-row td {
+  background: transparent;
 }
 
 .muted {
