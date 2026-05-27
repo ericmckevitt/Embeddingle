@@ -14,13 +14,14 @@ type GuessResult = {
 };
 
 type StartResponse = {
-  sessionId: string;
+  attempts: GuessResult[];
   vocabSize: number;
   maxAttempts: number;
+  bestScore: number;
+  gameOver: boolean;
 };
 
 export function GameClient() {
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [guess, setGuess] = useState("");
   const [history, setHistory] = useState<GuessResult[]>([]);
   const [status, setStatus] = useState("Starting game...");
@@ -33,21 +34,23 @@ export function GameClient() {
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const [copied, setCopied] = useState(false);
 
-  const startSession = async (): Promise<string> => {
+  const startSession = async (): Promise<void> => {
     const res = await fetch("/api/game/start", { method: "POST" });
     if (!res.ok) {
       throw new Error("Failed to start game");
     }
     const data = (await res.json()) as StartResponse;
-    setSessionId(data.sessionId);
     setMaxAttempts(data.maxAttempts);
-    setHistory([]);
-    setBestScore(0);
-    setWon(false);
-    setGameOver(false);
+    setHistory(data.attempts);
+    setBestScore(data.bestScore);
+    setWon(data.attempts.some((attempt) => attempt.isExact));
+    setGameOver(data.gameOver);
     setCopied(false);
-    setStatus(`Round started. ${data.maxAttempts} guesses available.`);
-    return data.sessionId;
+    setStatus(
+      data.gameOver
+        ? `Today's round is complete. Best score: ${data.bestScore.toFixed(1)}.`
+        : `Round started. ${data.maxAttempts} guesses available.`
+    );
   };
 
   useEffect(() => {
@@ -132,7 +135,7 @@ export function GameClient() {
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!sessionId || won || gameOver) {
+    if (won || gameOver) {
       return;
     }
     const normalizedGuess = guess.trim().toLowerCase();
@@ -143,11 +146,11 @@ export function GameClient() {
     setError(null);
 
     try {
-      const submitGuess = async (activeSessionId: string) => {
+      const submitGuess = async () => {
         const res = await fetch("/api/game/guess", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: activeSessionId, guess: normalizedGuess })
+          body: JSON.stringify({ guess: normalizedGuess })
         });
         const data = (await res.json()) as GuessResult & {
           error?: string;
@@ -157,14 +160,7 @@ export function GameClient() {
         return { res, data };
       };
 
-      let activeSessionId = sessionId;
-      let { res, data } = await submitGuess(activeSessionId);
-
-      if (res.status === 404) {
-        activeSessionId = await startSession();
-        setStatus("Round restarted.");
-        ({ res, data } = await submitGuess(activeSessionId));
-      }
+      const { res, data } = await submitGuess();
 
       if (!res.ok) {
         if (res.status === 409) {
@@ -248,10 +244,10 @@ export function GameClient() {
           onChange={(event) => setGuess(event.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Enter a vocabulary word"
-          disabled={!sessionId || won || gameOver}
+          disabled={won || gameOver}
           autoComplete="off"
         />
-        <button type="submit" disabled={!sessionId || won || gameOver}>
+        <button type="submit" disabled={won || gameOver}>
           Guess
         </button>
       </form>

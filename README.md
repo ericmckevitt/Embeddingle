@@ -18,6 +18,17 @@ npm run dev
 
 3. Open http://localhost:3000
 
+## Daily puzzle behavior
+
+The hidden word is deterministic per UTC day, so all users see the same target each day.
+
+For production, set these environment variables:
+
+```bash
+DAILY_SEED_SECRET=replace-with-random-secret
+COOKIE_SIGNING_SECRET=replace-with-random-secret
+```
+
 ## Offline embedding generation
 
 Create a Python environment and install dependencies:
