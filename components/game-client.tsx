@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 
 type GuessResult = {
   guess: string;
@@ -17,6 +17,8 @@ export function GameClient() {
   const [status, setStatus] = useState("Starting game...");
   const [error, setError] = useState<string | null>(null);
   const [won, setWon] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
 
   const startSession = async (): Promise<string> => {
     const res = await fetch("/api/game/start", { method: "POST" });
@@ -39,6 +41,46 @@ export function GameClient() {
     };
     void start();
   }, []);
+
+  useEffect(() => {
+    if (won) {
+      setSuggestions([]);
+      setActiveSuggestionIndex(-1);
+      return;
+    }
+
+    const normalized = guess.trim().toLowerCase();
+    if (!normalized) {
+      setSuggestions([]);
+      setActiveSuggestionIndex(-1);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const fetchSuggestions = async () => {
+        try {
+          const res = await fetch("/api/vocab/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: normalized, limit: 12 })
+          });
+          if (!res.ok) {
+            return;
+          }
+          const data = (await res.json()) as { suggestions: string[] };
+          setSuggestions(data.suggestions);
+          setActiveSuggestionIndex(data.suggestions.length > 0 ? 0 : -1);
+        } catch {
+          setSuggestions([]);
+          setActiveSuggestionIndex(-1);
+        }
+      };
+
+      void fetchSuggestions();
+    }, 140);
+
+    return () => clearTimeout(timer);
+  }, [guess, won]);
 
   const attempts = useMemo(() => history.length, [history]);
 
@@ -83,6 +125,8 @@ export function GameClient() {
 
       setHistory((prev) => [...prev, data]);
       setGuess("");
+      setSuggestions([]);
+      setActiveSuggestionIndex(-1);
       if (data.isExact) {
         setWon(true);
         setStatus(`Solved in ${data.attemptsUsed} attempts.`);
@@ -92,6 +136,48 @@ export function GameClient() {
     }
   };
 
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (suggestions.length === 0) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveSuggestionIndex((prev) => (prev + 1) % suggestions.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveSuggestionIndex((prev) => {
+        if (prev <= 0) {
+          return suggestions.length - 1;
+        }
+        return prev - 1;
+      });
+      return;
+    }
+
+    if (event.key === "Escape") {
+      setSuggestions([]);
+      setActiveSuggestionIndex(-1);
+      return;
+    }
+
+    if (event.key === "Enter" && activeSuggestionIndex >= 0) {
+      event.preventDefault();
+      setGuess(suggestions[activeSuggestionIndex]);
+      setSuggestions([]);
+      setActiveSuggestionIndex(-1);
+    }
+  };
+
+  const selectSuggestion = (word: string) => {
+    setGuess(word);
+    setSuggestions([]);
+    setActiveSuggestionIndex(-1);
+  };
+
   return (
     <section>
       <p className="muted">{status}</p>
@@ -99,13 +185,29 @@ export function GameClient() {
         <input
           value={guess}
           onChange={(event) => setGuess(event.target.value)}
+          onKeyDown={onKeyDown}
           placeholder="Enter a vocabulary word"
           disabled={!sessionId || won}
+          autoComplete="off"
         />
         <button type="submit" disabled={!sessionId || won}>
           Guess
         </button>
       </form>
+      {suggestions.length > 0 ? (
+        <div className="suggestions" role="listbox" aria-label="Vocabulary suggestions">
+          {suggestions.map((word, index) => (
+            <button
+              type="button"
+              key={word}
+              className={`suggestion-item ${index === activeSuggestionIndex ? "active" : ""}`}
+              onClick={() => selectSuggestion(word)}
+            >
+              {word}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {error ? <p className="error">{error}</p> : null}
       {won ? <p className="success">You found the target word.</p> : null}
 
