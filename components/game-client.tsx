@@ -2,6 +2,58 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 
+function fuzzyScore(query: string, word: string): number {
+  if (word === query) {
+    return 10000;
+  }
+  if (word.startsWith(query)) {
+    return 9000 - (word.length - query.length);
+  }
+
+  const includesIndex = word.indexOf(query);
+  if (includesIndex >= 0) {
+    return 7000 - includesIndex - (word.length - query.length);
+  }
+
+  let q = 0;
+  for (let i = 0; i < word.length && q < query.length; i += 1) {
+    if (word[i] === query[q]) {
+      q += 1;
+    }
+  }
+  if (q === query.length) {
+    return 5000 - (word.length - query.length);
+  }
+
+  return -1;
+}
+
+function searchLocalVocabulary(words: string[], query: string, limit = 12): string[] {
+  if (!query) {
+    return [];
+  }
+
+  const scored: Array<{ word: string; score: number }> = [];
+  for (const word of words) {
+    const score = fuzzyScore(query, word);
+    if (score >= 0) {
+      scored.push({ word, score });
+    }
+  }
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    if (a.word.length !== b.word.length) {
+      return a.word.length - b.word.length;
+    }
+    return a.word.localeCompare(b.word);
+  });
+
+  return scored.slice(0, Math.max(1, Math.min(50, limit))).map((entry) => entry.word);
+}
+
 type GuessResult = {
   guess: string;
   score: number;
@@ -33,6 +85,7 @@ export function GameClient() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const [copied, setCopied] = useState(false);
+  const [vocabWords, setVocabWords] = useState<string[]>([]);
 
   const startSession = async (): Promise<void> => {
     const res = await fetch("/api/game/start", { method: "POST" });
@@ -56,7 +109,14 @@ export function GameClient() {
   useEffect(() => {
     const start = async () => {
       try {
-        await startSession();
+        const [, vocabRes] = await Promise.all([
+          startSession(),
+          fetch("/api/vocab/list", { method: "GET" })
+        ]);
+        if (vocabRes.ok) {
+          const data = (await vocabRes.json()) as { words: string[] };
+          setVocabWords(data.words);
+        }
       } catch (startError) {
         setError(startError instanceof Error ? startError.message : "Unknown error");
       }
@@ -79,30 +139,13 @@ export function GameClient() {
     }
 
     const timer = setTimeout(() => {
-      const fetchSuggestions = async () => {
-        try {
-          const res = await fetch("/api/vocab/search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: normalized, limit: 12 })
-          });
-          if (!res.ok) {
-            return;
-          }
-          const data = (await res.json()) as { suggestions: string[] };
-          setSuggestions(data.suggestions);
-          setActiveSuggestionIndex(data.suggestions.length > 0 ? 0 : -1);
-        } catch {
-          setSuggestions([]);
-          setActiveSuggestionIndex(-1);
-        }
-      };
-
-      void fetchSuggestions();
+      const localSuggestions = searchLocalVocabulary(vocabWords, normalized, 12);
+      setSuggestions(localSuggestions);
+      setActiveSuggestionIndex(localSuggestions.length > 0 ? 0 : -1);
     }, 140);
 
     return () => clearTimeout(timer);
-  }, [guess, won, gameOver]);
+  }, [guess, won, gameOver, vocabWords]);
 
   const attempts = useMemo(() => history.length, [history]);
 
