@@ -46,7 +46,7 @@ export function GameClient() {
     setWon(false);
     setGameOver(false);
     setCopied(false);
-    setStatus(`Game started. Vocabulary size: ${data.vocabSize}.`);
+    setStatus(`Round started. ${data.maxAttempts} guesses available.`);
     return data.sessionId;
   };
 
@@ -162,7 +162,7 @@ export function GameClient() {
 
       if (res.status === 404) {
         activeSessionId = await startSession();
-        setStatus("Session expired during development reload. Started a new game.");
+        setStatus("Round restarted.");
         ({ res, data } = await submitGuess(activeSessionId));
       }
 
@@ -173,7 +173,7 @@ export function GameClient() {
           setBestScore(lockedBest);
           setStatus(`Round over. Best score: ${lockedBest.toFixed(1)}.`);
         }
-        setError(data.error ?? "Guess failed");
+        setError(data.error ?? "Guess failed.");
         return;
       }
 
@@ -242,7 +242,6 @@ export function GameClient() {
 
   return (
     <section>
-      <p className="muted">{status}</p>
       <form onSubmit={onSubmit}>
         <input
           value={guess}
@@ -270,12 +269,13 @@ export function GameClient() {
           ))}
         </div>
       ) : null}
-      {error ? <p className="error">{error}</p> : null}
-      {won ? <p className="success">You found the target word.</p> : null}
+      {error ? <p className="error-banner">{error}</p> : null}
+      {won ? <p className="success-banner">Correct. You found the hidden word.</p> : null}
 
-      <p className="muted">
-        Attempts: {attempts}/{maxAttempts} | Best score: {bestScore.toFixed(1)}
-      </p>
+      <div className="stats-row">
+        <span className="stat-chip">Attempts: {attempts}/{maxAttempts}</span>
+        <span className="stat-chip">Best score: {bestScore.toFixed(1)}</span>
+      </div>
 
       {gameOver ? (
         <div className="share-wrap">
