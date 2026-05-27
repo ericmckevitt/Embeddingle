@@ -1,6 +1,6 @@
 # Embeddingle (PoC)
 
-Engineering-first proof of concept for embedding-based semantic guessing.
+Proof of concept for embedding-based semantic guessing game, inspired by Wordle.
 
 ## Quick start
 
