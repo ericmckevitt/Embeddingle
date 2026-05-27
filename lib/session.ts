@@ -4,6 +4,7 @@ import { GuessResult, Session } from "@/lib/types";
 import { getVector, randomTargetWord } from "@/lib/vocab";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 6;
+export const MAX_ATTEMPTS = 6;
 
 declare global {
   var __embeddingleSessions: Map<string, Session> | undefined;
@@ -54,6 +55,10 @@ export function getSession(sessionId: string): Session | undefined {
 }
 
 export function scoreGuess(session: Session, guessWord: string): GuessResult {
+  if (session.guesses.length >= MAX_ATTEMPTS) {
+    throw new Error("No attempts remaining");
+  }
+
   const guessVector = getVector(guessWord);
   if (!guessVector) {
     throw new Error("Guess not in vocabulary");
@@ -62,14 +67,22 @@ export function scoreGuess(session: Session, guessWord: string): GuessResult {
   const similarity = cosineSimilarity(session.targetVector, guessVector);
   const rank = rankFromDistribution(session.sortedSimilarities, similarity);
   const score = percentileFromRank(rank, session.sortedSimilarities.length);
+  const priorBest = session.guesses.reduce((best, guess) => Math.max(best, guess.score), 0);
+  const bestScore = Math.max(priorBest, score);
+  const attemptsUsed = session.guesses.length + 1;
+  const attemptsRemaining = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
   const isExact = guessWord === session.targetWord;
+  const gameOver = isExact || attemptsRemaining === 0;
 
   const result: GuessResult = {
     guess: guessWord,
     score,
     rank,
     isExact,
-    attemptsUsed: session.guesses.length + 1
+    attemptsUsed,
+    attemptsRemaining,
+    gameOver,
+    bestScore
   };
 
   session.guesses.push(result);

@@ -9,6 +9,9 @@ export type GuessResult = {
   rank: number;
   isExact: boolean;
   attemptsUsed: number;
+  attemptsRemaining: number;
+  gameOver: boolean;
+  bestScore: number;
 };
 
 export type Session = {

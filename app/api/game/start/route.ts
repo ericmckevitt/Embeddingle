@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSession } from "@/lib/session";
+import { MAX_ATTEMPTS, createSession } from "@/lib/session";
 import { getVocabStore } from "@/lib/vocab";
 
 export async function POST() {
@@ -9,7 +9,8 @@ export async function POST() {
     return NextResponse.json({
       sessionId: session.id,
       attempts: [],
-      vocabSize: words.length
+      vocabSize: words.length,
+      maxAttempts: MAX_ATTEMPTS
     });
   } catch (error) {
     return NextResponse.json(

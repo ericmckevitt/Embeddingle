@@ -8,6 +8,15 @@ type GuessResult = {
   rank: number;
   isExact: boolean;
   attemptsUsed: number;
+  attemptsRemaining: number;
+  gameOver: boolean;
+  bestScore: number;
+};
+
+type StartResponse = {
+  sessionId: string;
+  vocabSize: number;
+  maxAttempts: number;
 };
 
 export function GameClient() {
@@ -17,6 +26,9 @@ export function GameClient() {
   const [status, setStatus] = useState("Starting game...");
   const [error, setError] = useState<string | null>(null);
   const [won, setWon] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [maxAttempts, setMaxAttempts] = useState(6);
+  const [bestScore, setBestScore] = useState(0);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
 
@@ -25,8 +37,13 @@ export function GameClient() {
     if (!res.ok) {
       throw new Error("Failed to start game");
     }
-    const data = (await res.json()) as { sessionId: string; vocabSize: number };
+    const data = (await res.json()) as StartResponse;
     setSessionId(data.sessionId);
+    setMaxAttempts(data.maxAttempts);
+    setHistory([]);
+    setBestScore(0);
+    setWon(false);
+    setGameOver(false);
     setStatus(`Game started. Vocabulary size: ${data.vocabSize}.`);
     return data.sessionId;
   };
@@ -43,7 +60,7 @@ export function GameClient() {
   }, []);
 
   useEffect(() => {
-    if (won) {
+    if (won || gameOver) {
       setSuggestions([]);
       setActiveSuggestionIndex(-1);
       return;
@@ -80,13 +97,13 @@ export function GameClient() {
     }, 140);
 
     return () => clearTimeout(timer);
-  }, [guess, won]);
+  }, [guess, won, gameOver]);
 
   const attempts = useMemo(() => history.length, [history]);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!sessionId || won) {
+    if (!sessionId || won || gameOver) {
       return;
     }
     const normalizedGuess = guess.trim().toLowerCase();
@@ -103,7 +120,11 @@ export function GameClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionId: activeSessionId, guess: normalizedGuess })
         });
-        const data = (await res.json()) as GuessResult & { error?: string };
+        const data = (await res.json()) as GuessResult & {
+          error?: string;
+          gameOver?: boolean;
+          bestScore?: number;
+        };
         return { res, data };
       };
 
@@ -112,24 +133,36 @@ export function GameClient() {
 
       if (res.status === 404) {
         activeSessionId = await startSession();
-        setHistory([]);
-        setWon(false);
         setStatus("Session expired during development reload. Started a new game.");
         ({ res, data } = await submitGuess(activeSessionId));
       }
 
       if (!res.ok) {
+        if (res.status === 409) {
+          const lockedBest = data.bestScore ?? bestScore;
+          setGameOver(true);
+          setBestScore(lockedBest);
+          setStatus(`Round over. Best score: ${lockedBest.toFixed(1)}.`);
+        }
         setError(data.error ?? "Guess failed");
         return;
       }
 
       setHistory((prev) => [...prev, data]);
+      setBestScore(data.bestScore);
       setGuess("");
       setSuggestions([]);
       setActiveSuggestionIndex(-1);
+
       if (data.isExact) {
         setWon(true);
-        setStatus(`Solved in ${data.attemptsUsed} attempts.`);
+        setGameOver(true);
+        setStatus(
+          `Solved in ${data.attemptsUsed} attempts. Best score: ${data.bestScore.toFixed(1)}.`
+        );
+      } else if (data.gameOver) {
+        setGameOver(true);
+        setStatus(`Round over. Best score: ${data.bestScore.toFixed(1)}.`);
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unknown error");
@@ -187,10 +220,10 @@ export function GameClient() {
           onChange={(event) => setGuess(event.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Enter a vocabulary word"
-          disabled={!sessionId || won}
+          disabled={!sessionId || won || gameOver}
           autoComplete="off"
         />
-        <button type="submit" disabled={!sessionId || won}>
+        <button type="submit" disabled={!sessionId || won || gameOver}>
           Guess
         </button>
       </form>
@@ -211,7 +244,9 @@ export function GameClient() {
       {error ? <p className="error">{error}</p> : null}
       {won ? <p className="success">You found the target word.</p> : null}
 
-      <p className="muted">Attempts: {attempts}</p>
+      <p className="muted">
+        Attempts: {attempts}/{maxAttempts} | Best score: {bestScore.toFixed(1)}
+      </p>
 
       <table>
         <thead>
@@ -229,9 +264,7 @@ export function GameClient() {
               style={{
                 ["--score" as string]: `${Math.max(0, Math.min(100, item.score))}%`,
                 ["--score-hue" as string]: String(
-                  Math.round(
-                    12 + ((Math.max(0, Math.min(100, item.score)) / 100) * (142 - 12))
-                  )
+                  Math.round(12 + ((Math.max(0, Math.min(100, item.score)) / 100) * (142 - 12)))
                 )
               }}
             >

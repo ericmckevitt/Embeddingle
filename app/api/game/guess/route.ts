@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, scoreGuess } from "@/lib/session";
+import { MAX_ATTEMPTS, getSession, scoreGuess } from "@/lib/session";
 import { getVector } from "@/lib/vocab";
 
 type GuessRequest = {
@@ -31,6 +31,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Guess must be in allowed vocabulary" },
       { status: 400 }
+    );
+  }
+
+  if (session.guesses.length >= MAX_ATTEMPTS) {
+    const bestScore = session.guesses.reduce(
+      (best, attempt) => Math.max(best, attempt.score),
+      0
+    );
+    return NextResponse.json(
+      {
+        error: `No attempts remaining. Best score: ${bestScore.toFixed(1)}`,
+        gameOver: true,
+        bestScore
+      },
+      { status: 409 }
     );
   }
 
