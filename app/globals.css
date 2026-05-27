@@ -123,3 +123,10 @@ td {
   color: #12622d;
   font-weight: 600;
 }
+
+.share-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0.9rem;
+}

@@ -31,6 +31,7 @@ export function GameClient() {
   const [bestScore, setBestScore] = useState(0);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const [copied, setCopied] = useState(false);
 
   const startSession = async (): Promise<string> => {
     const res = await fetch("/api/game/start", { method: "POST" });
@@ -44,6 +45,7 @@ export function GameClient() {
     setBestScore(0);
     setWon(false);
     setGameOver(false);
+    setCopied(false);
     setStatus(`Game started. Vocabulary size: ${data.vocabSize}.`);
     return data.sessionId;
   };
@@ -100,6 +102,33 @@ export function GameClient() {
   }, [guess, won, gameOver]);
 
   const attempts = useMemo(() => history.length, [history]);
+
+  const buildShareText = () => {
+    const total = maxAttempts;
+    const used = history.length;
+    const header = `Embeddingle ${used}/${total}`;
+    const best = `Best score: ${bestScore.toFixed(1)}`;
+    const barWidth = 10;
+
+    const lines = history.map((item, index) => {
+      const filled = Math.max(0, Math.min(barWidth, Math.round((item.score / 100) * barWidth)));
+      const bar = `${"#".repeat(filled)}${"-".repeat(barWidth - filled)}`;
+      return `${index + 1}. [${bar}] ${item.score.toFixed(1)}`;
+    });
+
+    return [header, best, ...lines].join("\n");
+  };
+
+  const onCopyShare = async () => {
+    const text = buildShareText();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Unable to copy to clipboard.");
+    }
+  };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -247,6 +276,13 @@ export function GameClient() {
       <p className="muted">
         Attempts: {attempts}/{maxAttempts} | Best score: {bestScore.toFixed(1)}
       </p>
+
+      {gameOver ? (
+        <div className="share-wrap">
+          <button type="button" onClick={onCopyShare}>Copy share result</button>
+          {copied ? <span className="muted">Copied.</span> : null}
+        </div>
+      ) : null}
 
       <table>
         <thead>
