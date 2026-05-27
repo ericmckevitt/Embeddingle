@@ -1,0 +1,10 @@
+{
+  "generated_at_utc": "2026-05-27T00:37:52.721998+00:00",
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "rows": 10000,
+  "dimensions": 384,
+  "normalized": true,
+  "vocab_path": "data/vocab.txt",
+  "vocab_sha256": "1717522dd533e14f926dd3c8e31872a1fcb1ac8863d710fe6f40c317537c4e5d",
+  "batch_size": 256
+}
