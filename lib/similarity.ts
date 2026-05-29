@@ -1,5 +1,9 @@
 import { getVocabStore } from "@/lib/vocab";
 
+const COSINE_FLOOR = 0;
+const SCORE_LOGISTIC_K = 10;
+const SCORE_LOGISTIC_MIDPOINT = 0.3;
+
 function dot(a: number[], b: number[]): number {
   let total = 0;
   for (let i = 0; i < a.length; i += 1) {
@@ -43,10 +47,8 @@ export function rankFromDistribution(sortedSimilarities: number[], similarity: n
   return left + 1;
 }
 
-export function percentileFromRank(rank: number, total: number): number {
-  if (total <= 1) {
-    return 100;
-  }
-  const lowerCount = total - rank;
-  return (lowerCount / (total - 1)) * 100;
+export function scoreFromCosine(similarity: number): number {
+  const normalized = Math.max(0, Math.min(1, (similarity - COSINE_FLOOR) / (1 - COSINE_FLOOR)));
+  const logistic = 1 / (1 + Math.exp(-SCORE_LOGISTIC_K * (normalized - SCORE_LOGISTIC_MIDPOINT)));
+  return logistic * 100;
 }

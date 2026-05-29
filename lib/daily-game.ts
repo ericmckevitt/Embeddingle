@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { buildSimilarityDistribution, cosineSimilarity, percentileFromRank, rankFromDistribution } from "@/lib/similarity";
+import { buildSimilarityDistribution, cosineSimilarity, rankFromDistribution, scoreFromCosine } from "@/lib/similarity";
 import { GuessResult } from "@/lib/types";
-import { getVector, getVocabStore } from "@/lib/vocab";
+import { getVector, getVocabStore, randomTargetWord } from "@/lib/vocab";
 
 export const MAX_ATTEMPTS = 6;
 
@@ -36,13 +36,14 @@ function pickTargetWordForDate(dateKey: string): string {
   return words[asInt % words.length];
 }
 
-export function getDailyContext(dateKey = utcDateKey()): DailyContext {
-  const cached = contextCache.get(dateKey);
+export function getDailyContext(dateKey = utcDateKey(), targetOverride?: string): DailyContext {
+  const cacheKey = targetOverride ? `${dateKey}:${targetOverride}` : dateKey;
+  const cached = contextCache.get(cacheKey);
   if (cached) {
     return cached;
   }
 
-  const targetWord = pickTargetWordForDate(dateKey);
+  const targetWord = targetOverride ?? pickTargetWordForDate(dateKey);
   const targetVector = getVector(targetWord);
   if (!targetVector) {
     throw new Error("Target vector missing");
@@ -54,7 +55,7 @@ export function getDailyContext(dateKey = utcDateKey()): DailyContext {
     targetVector,
     sortedSimilarities: buildSimilarityDistribution(targetVector)
   };
-  contextCache.set(dateKey, context);
+  contextCache.set(cacheKey, context);
 
   if (process.env.DEBUG_GAME === "true") {
     console.log(`[DEBUG_GAME] date=${dateKey} target=${targetWord}`);
@@ -77,7 +78,7 @@ export function scoreGuessWords(guessWords: string[], dateKey = utcDateKey()): G
 
     const similarity = cosineSimilarity(context.targetVector, guessVector);
     const rank = rankFromDistribution(context.sortedSimilarities, similarity);
-    const score = percentileFromRank(rank, context.sortedSimilarities.length);
+    const score = scoreFromCosine(similarity);
     bestScore = Math.max(bestScore, score);
 
     const attemptsUsed = i + 1;
@@ -102,6 +103,55 @@ export function scoreGuessWords(guessWords: string[], dateKey = utcDateKey()): G
   }
 
   return results;
+}
+
+export function scoreGuessWordsForTarget(
+  guessWords: string[],
+  targetWord: string,
+  dateKey = utcDateKey()
+): GuessResult[] {
+  const context = getDailyContext(dateKey, targetWord);
+  const results: GuessResult[] = [];
+  let bestScore = 0;
+
+  for (let i = 0; i < guessWords.length; i += 1) {
+    const guessWord = guessWords[i];
+    const guessVector = getVector(guessWord);
+    if (!guessVector) {
+      continue;
+    }
+
+    const similarity = cosineSimilarity(context.targetVector, guessVector);
+    const rank = rankFromDistribution(context.sortedSimilarities, similarity);
+    const score = scoreFromCosine(similarity);
+    bestScore = Math.max(bestScore, score);
+
+    const attemptsUsed = i + 1;
+    const attemptsRemaining = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
+    const isExact = guessWord === context.targetWord;
+    const gameOver = isExact || attemptsRemaining === 0;
+
+    results.push({
+      guess: guessWord,
+      score,
+      rank,
+      isExact,
+      attemptsUsed,
+      attemptsRemaining,
+      gameOver,
+      bestScore
+    });
+
+    if (isExact) {
+      break;
+    }
+  }
+
+  return results;
+}
+
+export function randomDebugTargetWord(): string {
+  return randomTargetWord();
 }
 
 export function todayDateKey(): string {

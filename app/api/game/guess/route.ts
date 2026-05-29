@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { MAX_ATTEMPTS, scoreGuessWords, todayDateKey } from "@/lib/daily-game";
+import { MAX_ATTEMPTS, scoreGuessWords, scoreGuessWordsForTarget, todayDateKey } from "@/lib/daily-game";
 import { decodeProgress, encodeProgress, progressCookieName } from "@/lib/progress-cookie";
 import { getVector } from "@/lib/vocab";
+
+const DEBUG_TARGET_COOKIE = "embeddingle_debug_target";
 
 type GuessRequest = {
   guess?: string;
@@ -30,10 +32,14 @@ export async function POST(request: NextRequest) {
   }
 
   const dateKey = todayDateKey();
+  const debugMode = process.env.DEBUG_GAME === "true";
+  const debugTarget = debugMode ? cookies().get(DEBUG_TARGET_COOKIE)?.value : undefined;
   const raw = cookies().get(progressCookieName())?.value;
   const progress = decodeProgress(raw);
   const guessWords = progress?.dateKey === dateKey ? progress.guesses.slice(0, MAX_ATTEMPTS) : [];
-  const attempts = scoreGuessWords(guessWords, dateKey);
+  const attempts = debugTarget
+    ? scoreGuessWordsForTarget(guessWords, debugTarget, dateKey)
+    : scoreGuessWords(guessWords, dateKey);
   const alreadyOver = attempts.length >= MAX_ATTEMPTS || attempts.some((attempt) => attempt.isExact);
 
   if (alreadyOver) {
@@ -50,7 +56,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const nextGuessWords = [...guessWords, guess].slice(0, MAX_ATTEMPTS);
-    const nextAttempts = scoreGuessWords(nextGuessWords, dateKey);
+    const nextAttempts = debugTarget
+      ? scoreGuessWordsForTarget(nextGuessWords, debugTarget, dateKey)
+      : scoreGuessWords(nextGuessWords, dateKey);
     const result = nextAttempts[nextAttempts.length - 1];
 
     const response = NextResponse.json(result);

@@ -18,6 +18,11 @@ def cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
+def display_score(similarity: float) -> float:
+    clamped = max(0.0, min(1.0, similarity))
+    return (1 / (1 + math.exp(-10 * (clamped - 0.3)))) * 100
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="data/embeddings.jsonl")
@@ -45,8 +50,8 @@ def main() -> None:
     total = len(scored)
     print(f"Target: {target} (vocab={total})")
     for rank, (word, sim) in enumerate(scored[: args.top], start=1):
-        percentile = ((total - rank) / (total - 1)) * 100 if total > 1 else 100
-        print(f"#{rank:>3} {word:<20} sim={sim:0.4f} score={percentile:0.1f}")
+        score = display_score(sim)
+        print(f"#{rank:>3} {word:<20} sim={sim:0.4f} score={score:0.1f}")
 
 
 if __name__ == "__main__":
