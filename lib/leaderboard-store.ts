@@ -57,7 +57,7 @@ export async function insertLeaderboardEntry(payload: LeaderboardInsert): Promis
 
 export async function listLeaderboardEntries(limit = 100): Promise<LeaderboardEntry[]> {
   const bounded = Math.max(1, Math.min(500, limit));
-  const url = `${supabaseUrl()}/rest/v1/leaderboard_entries?select=id,name,date_key,target_word,best_score,best_guess,attempts_used,solved,created_at&order=created_at.desc&limit=${bounded}`;
+  const url = `${supabaseUrl()}/rest/v1/leaderboard_entries?select=id,name,date_key,target_word,best_score,best_guess,attempts_used,solved,created_at&order=date_key.desc,best_score.desc,created_at.desc&limit=${bounded}`;
   const response = await fetch(url, {
     method: "GET",
     headers: {
