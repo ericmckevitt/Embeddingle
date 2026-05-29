@@ -77,6 +77,18 @@ type StartResponse = {
   topSimilarWords: Array<{ word: string; similarity: number; score: number; rank: number }>;
 };
 
+type LeaderboardEntry = {
+  id: string;
+  name: string;
+  date_key: string;
+  target_word: string;
+  best_score: number;
+  best_guess: string;
+  attempts_used: number;
+  solved: boolean;
+  created_at: string;
+};
+
 export function GameClient() {
   const [guess, setGuess] = useState("");
   const [history, setHistory] = useState<GuessResult[]>([]);
@@ -94,6 +106,10 @@ export function GameClient() {
   const [topSimilarWords, setTopSimilarWords] = useState<
     Array<{ word: string; similarity: number; score: number; rank: number }>
   >([]);
+  const [playerName, setPlayerName] = useState("");
+  const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
 
   const startSession = async (): Promise<void> => {
     const res = await fetch("/api/game/start", { method: "POST" });
@@ -157,6 +173,27 @@ export function GameClient() {
     return () => clearTimeout(timer);
   }, [guess, won, gameOver, vocabWords]);
 
+  useEffect(() => {
+    if (!gameOver) {
+      return;
+    }
+
+    const loadLeaderboard = async () => {
+      try {
+        const res = await fetch("/api/leaderboard/list?limit=100", { method: "GET" });
+        if (!res.ok) {
+          return;
+        }
+        const data = (await res.json()) as { entries: LeaderboardEntry[] };
+        setLeaderboardEntries(data.entries);
+      } catch {
+        setLeaderboardEntries([]);
+      }
+    };
+
+    void loadLeaderboard();
+  }, [gameOver]);
+
   const attempts = useMemo(() => history.length, [history]);
 
   const buildShareText = () => {
@@ -183,6 +220,45 @@ export function GameClient() {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       setError("Unable to copy to clipboard.");
+    }
+  };
+
+  const onSubmitLeaderboard = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!gameOver) {
+      return;
+    }
+
+    const name = playerName.trim();
+    if (!name) {
+      setSubmitMessage("Enter a name before submitting.");
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitMessage(null);
+    try {
+      const res = await fetch("/api/leaderboard/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name })
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setSubmitMessage(data.error ?? "Could not submit leaderboard entry.");
+        return;
+      }
+
+      setSubmitMessage("Submitted to leaderboard.");
+      const listRes = await fetch("/api/leaderboard/list?limit=100", { method: "GET" });
+      if (listRes.ok) {
+        const listData = (await listRes.json()) as { entries: LeaderboardEntry[] };
+        setLeaderboardEntries(listData.entries);
+      }
+    } catch {
+      setSubmitMessage("Could not submit leaderboard entry.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -350,6 +426,46 @@ export function GameClient() {
               </li>
             ))}
           </ol>
+        </section>
+      ) : null}
+
+      {gameOver ? (
+        <section className="leaderboard-box">
+          <p className="reveal-title">Submit to leaderboard</p>
+          <form className="leaderboard-submit" onSubmit={onSubmitLeaderboard}>
+            <input
+              value={playerName}
+              onChange={(event) => setPlayerName(event.target.value)}
+              placeholder="Name"
+              maxLength={32}
+            />
+            <button type="submit" disabled={submitting}>{submitting ? "Submitting..." : "Submit"}</button>
+          </form>
+          {submitMessage ? <p className="muted">{submitMessage}</p> : null}
+
+          <p className="reveal-title">Leaderboard</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Best</th>
+                <th>Best Guess</th>
+                <th>Target</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leaderboardEntries.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{entry.name}</td>
+                  <td>{entry.best_score.toFixed(1)}</td>
+                  <td>{entry.best_guess}</td>
+                  <td>{entry.target_word}</td>
+                  <td>{entry.date_key}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </section>
       ) : null}
 

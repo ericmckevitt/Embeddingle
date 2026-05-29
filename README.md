@@ -27,6 +27,8 @@ For production, set these environment variables:
 ```bash
 DAILY_SEED_SECRET=replace-with-random-secret
 COOKIE_SIGNING_SECRET=replace-with-random-secret
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-secret
 ```
 
 ## Offline embedding generation
