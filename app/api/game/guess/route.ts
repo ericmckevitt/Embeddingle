@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { MAX_ATTEMPTS, scoreGuessWords, scoreGuessWordsForTarget, todayDateKey } from "@/lib/daily-game";
+import { MAX_ATTEMPTS, getRevealData, scoreGuessWords, scoreGuessWordsForTarget, todayDateKey } from "@/lib/daily-game";
 import { decodeProgress, encodeProgress, progressCookieName } from "@/lib/progress-cookie";
 import { getVector } from "@/lib/vocab";
 
@@ -44,11 +44,15 @@ export async function POST(request: NextRequest) {
 
   if (alreadyOver) {
     const bestScore = attempts.reduce((best, attempt) => Math.max(best, attempt.score), 0);
+    const solved = attempts.some((attempt) => attempt.isExact);
+    const reveal = !solved ? getRevealData(dateKey, debugTarget) : null;
     return NextResponse.json(
       {
         error: `No attempts remaining. Best score: ${bestScore.toFixed(1)}`,
         gameOver: true,
-        bestScore
+        bestScore,
+        revealWord: reveal?.targetWord ?? null,
+        topSimilarWords: reveal?.topSimilarWords ?? []
       },
       { status: 409 }
     );
@@ -60,8 +64,13 @@ export async function POST(request: NextRequest) {
       ? scoreGuessWordsForTarget(nextGuessWords, debugTarget, dateKey)
       : scoreGuessWords(nextGuessWords, dateKey);
     const result = nextAttempts[nextAttempts.length - 1];
+    const reveal = result.gameOver && !result.isExact ? getRevealData(dateKey, debugTarget) : null;
 
-    const response = NextResponse.json(result);
+    const response = NextResponse.json({
+      ...result,
+      revealWord: reveal?.targetWord ?? null,
+      topSimilarWords: reveal?.topSimilarWords ?? []
+    });
     response.cookies.set({
       name: progressCookieName(),
       value: encodeProgress({ dateKey, guesses: nextGuessWords }),

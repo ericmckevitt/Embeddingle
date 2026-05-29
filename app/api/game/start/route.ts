@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { MAX_ATTEMPTS, randomDebugTargetWord, scoreGuessWords, scoreGuessWordsForTarget, todayDateKey } from "@/lib/daily-game";
+import { MAX_ATTEMPTS, getRevealData, randomDebugTargetWord, scoreGuessWords, scoreGuessWordsForTarget, todayDateKey } from "@/lib/daily-game";
 import { decodeProgress, progressCookieName } from "@/lib/progress-cookie";
 import { getVocabStore } from "@/lib/vocab";
 
@@ -23,6 +23,8 @@ export async function POST() {
       : scoreGuessWords(guessWords, dateKey);
     const bestScore = attempts.reduce((best, guess) => Math.max(best, guess.score), 0);
     const gameOver = attempts.length >= MAX_ATTEMPTS || attempts.some((guess) => guess.isExact);
+    const solved = attempts.some((guess) => guess.isExact);
+    const reveal = gameOver && !solved ? getRevealData(dateKey, debugTarget ?? undefined) : null;
 
     const response = NextResponse.json({
       attempts,
@@ -30,7 +32,9 @@ export async function POST() {
       maxAttempts: MAX_ATTEMPTS,
       bestScore,
       gameOver,
-      dateKey
+      dateKey,
+      revealWord: reveal?.targetWord ?? null,
+      topSimilarWords: reveal?.topSimilarWords ?? []
     });
 
     if (debugMode) {

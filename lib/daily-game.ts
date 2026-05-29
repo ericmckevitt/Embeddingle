@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { buildSimilarityDistribution, cosineSimilarity, rankFromDistribution, scoreFromCosine } from "@/lib/similarity";
+import { cosineSimilarity, rankFromDistribution, scoreFromCosine } from "@/lib/similarity";
 import { GuessResult } from "@/lib/types";
 import { getVector, getVocabStore, randomTargetWord } from "@/lib/vocab";
 
@@ -10,6 +10,7 @@ type DailyContext = {
   targetWord: string;
   targetVector: number[];
   sortedSimilarities: number[];
+  topSimilarWords: Array<{ word: string; similarity: number; score: number; rank: number }>;
 };
 
 declare global {
@@ -49,11 +50,24 @@ export function getDailyContext(dateKey = utcDateKey(), targetOverride?: string)
     throw new Error("Target vector missing");
   }
 
+  const { words, vectorsByWord } = getVocabStore();
+  const similaritiesByWord = words.map((word) => {
+    const similarity = cosineSimilarity(targetVector, vectorsByWord.get(word)!);
+    return { word, similarity };
+  });
+  similaritiesByWord.sort((a, b) => b.similarity - a.similarity);
+
   const context: DailyContext = {
     dateKey,
     targetWord,
     targetVector,
-    sortedSimilarities: buildSimilarityDistribution(targetVector)
+    sortedSimilarities: similaritiesByWord.map((item) => item.similarity),
+    topSimilarWords: similaritiesByWord.slice(0, 10).map((item, index) => ({
+      word: item.word,
+      similarity: item.similarity,
+      score: scoreFromCosine(item.similarity),
+      rank: index + 1
+    }))
   };
   contextCache.set(cacheKey, context);
 
@@ -64,8 +78,7 @@ export function getDailyContext(dateKey = utcDateKey(), targetOverride?: string)
   return context;
 }
 
-export function scoreGuessWords(guessWords: string[], dateKey = utcDateKey()): GuessResult[] {
-  const context = getDailyContext(dateKey);
+function scoreGuessWordsWithContext(context: DailyContext, guessWords: string[]): GuessResult[] {
   const results: GuessResult[] = [];
   let bestScore = 0;
 
@@ -103,6 +116,11 @@ export function scoreGuessWords(guessWords: string[], dateKey = utcDateKey()): G
   }
 
   return results;
+}
+
+export function scoreGuessWords(guessWords: string[], dateKey = utcDateKey()): GuessResult[] {
+  const context = getDailyContext(dateKey);
+  return scoreGuessWordsWithContext(context, guessWords);
 }
 
 export function scoreGuessWordsForTarget(
@@ -111,43 +129,7 @@ export function scoreGuessWordsForTarget(
   dateKey = utcDateKey()
 ): GuessResult[] {
   const context = getDailyContext(dateKey, targetWord);
-  const results: GuessResult[] = [];
-  let bestScore = 0;
-
-  for (let i = 0; i < guessWords.length; i += 1) {
-    const guessWord = guessWords[i];
-    const guessVector = getVector(guessWord);
-    if (!guessVector) {
-      continue;
-    }
-
-    const similarity = cosineSimilarity(context.targetVector, guessVector);
-    const rank = rankFromDistribution(context.sortedSimilarities, similarity);
-    const score = scoreFromCosine(similarity);
-    bestScore = Math.max(bestScore, score);
-
-    const attemptsUsed = i + 1;
-    const attemptsRemaining = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
-    const isExact = guessWord === context.targetWord;
-    const gameOver = isExact || attemptsRemaining === 0;
-
-    results.push({
-      guess: guessWord,
-      score,
-      rank,
-      isExact,
-      attemptsUsed,
-      attemptsRemaining,
-      gameOver,
-      bestScore
-    });
-
-    if (isExact) {
-      break;
-    }
-  }
-
-  return results;
+  return scoreGuessWordsWithContext(context, guessWords);
 }
 
 export function randomDebugTargetWord(): string {
@@ -156,4 +138,12 @@ export function randomDebugTargetWord(): string {
 
 export function todayDateKey(): string {
   return utcDateKey();
+}
+
+export function getRevealData(dateKey = utcDateKey(), targetOverride?: string) {
+  const context = getDailyContext(dateKey, targetOverride);
+  return {
+    targetWord: context.targetWord,
+    topSimilarWords: context.topSimilarWords
+  };
 }

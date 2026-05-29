@@ -63,6 +63,8 @@ type GuessResult = {
   attemptsRemaining: number;
   gameOver: boolean;
   bestScore: number;
+  revealWord?: string | null;
+  topSimilarWords?: Array<{ word: string; similarity: number; score: number; rank: number }>;
 };
 
 type StartResponse = {
@@ -71,6 +73,8 @@ type StartResponse = {
   maxAttempts: number;
   bestScore: number;
   gameOver: boolean;
+  revealWord: string | null;
+  topSimilarWords: Array<{ word: string; similarity: number; score: number; rank: number }>;
 };
 
 export function GameClient() {
@@ -86,6 +90,10 @@ export function GameClient() {
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const [copied, setCopied] = useState(false);
   const [vocabWords, setVocabWords] = useState<string[]>([]);
+  const [revealWord, setRevealWord] = useState<string | null>(null);
+  const [topSimilarWords, setTopSimilarWords] = useState<
+    Array<{ word: string; similarity: number; score: number; rank: number }>
+  >([]);
 
   const startSession = async (): Promise<void> => {
     const res = await fetch("/api/game/start", { method: "POST" });
@@ -98,6 +106,8 @@ export function GameClient() {
     setBestScore(data.bestScore);
     setWon(data.attempts.some((attempt) => attempt.isExact));
     setGameOver(data.gameOver);
+    setRevealWord(data.revealWord);
+    setTopSimilarWords(data.topSimilarWords);
     setCopied(false);
     setStatus(
       data.gameOver
@@ -199,6 +209,8 @@ export function GameClient() {
           error?: string;
           gameOver?: boolean;
           bestScore?: number;
+          revealWord?: string | null;
+          topSimilarWords?: Array<{ word: string; similarity: number; score: number; rank: number }>;
         };
         return { res, data };
       };
@@ -210,6 +222,8 @@ export function GameClient() {
           const lockedBest = data.bestScore ?? bestScore;
           setGameOver(true);
           setBestScore(lockedBest);
+          setRevealWord(data.revealWord ?? null);
+          setTopSimilarWords(data.topSimilarWords ?? []);
           setStatus(`Round over. Best score: ${lockedBest.toFixed(1)}.`);
         }
         setError(data.error ?? "Guess failed.");
@@ -230,6 +244,8 @@ export function GameClient() {
         );
       } else if (data.gameOver) {
         setGameOver(true);
+        setRevealWord(data.revealWord ?? null);
+        setTopSimilarWords(data.topSimilarWords ?? []);
         setStatus(`Round over. Best score: ${data.bestScore.toFixed(1)}.`);
       }
     } catch (submitError) {
@@ -321,6 +337,20 @@ export function GameClient() {
           <button type="button" onClick={onCopyShare}>Copy share result</button>
           {copied ? <span className="muted">Copied.</span> : null}
         </div>
+      ) : null}
+
+      {gameOver && !won && revealWord ? (
+        <section className="reveal-box">
+          <p className="reveal-title">Today&apos;s word was <strong>{revealWord}</strong>.</p>
+          <p className="muted">Top 10 most similar words:</p>
+          <ol className="reveal-list">
+            {topSimilarWords.map((item) => (
+              <li key={`${item.rank}-${item.word}`}>
+                {item.word} - {item.score.toFixed(1)}
+              </li>
+            ))}
+          </ol>
+        </section>
       ) : null}
 
       <table>
